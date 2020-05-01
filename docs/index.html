@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="generator" content="pandoc" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=yes"
+    />
+    <title>Interpretability in Reinforcement Learning Agents</title>
+    <style>
+      code {
+        white-space: pre-wrap;
+      }
+      span.smallcaps {
+        font-variant: small-caps;
+      }
+      span.underline {
+        text-decoration: underline;
+      }
+      div.column {
+        display: inline-block;
+        vertical-align: top;
+        width: 50%;
+      }
+    </style>
+    <link rel="stylesheet" href="./writeup.css" />
+    <!--[if lt IE 9]>
+      <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+    <![endif]-->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.11.1/dist/katex.min.css" integrity="sha384-zB1R0rpPzHqg7Kpt0Aljp8JPLqbXI3bhnPWROx27a9N0Ll6ZP/+DiW/UqRcLbRjq" crossorigin="anonymous">
+
+    <!-- The loading of KaTeX is deferred to speed up page rendering -->
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.11.1/dist/katex.min.js" integrity="sha384-y23I5Q6l+B6vatafAwxRu/0oK/79VlbSz7Q9aiSZUvyWYIYsd+qj+o24G5ZU2zJz" crossorigin="anonymous"></script>
+
+    <!-- To automatically render math in text elements, include the auto-render extension: -->
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.11.1/dist/contrib/auto-render.min.js" integrity="sha384-kWPLUVMOks5AQFrykwIup5lo0m3iMkkHrD0uJ4H5cjeGihAutqP0yW0J6dpFiVkI" crossorigin="anonymous"
+        onload="renderMathInElement(document.body);"></script>
+
+    <script src="https://d3js.org/d3.v5.min.js"></script> 
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+  </head>
+  <body>
+    <video controls="true" allowfullscreen="true" width="800" autoplay muted loop>
+      <source src="videos/Breakout.mp4" type="video/webm" />
+    </video>
+    <h1
+      id="regularization-and-visualization-of-attention-in-reinforcement-learning-agents"
+    >
+      Regularization and visualization of attention in reinforcement learning
+      agents
+    </h1>
+    <p>
+      Dmitry Nikulin <a class="icon-link"
+                        href="https://github.com/dniku/"><img src="images/github.png"
+                                                              alt="Github
+                                                                   account"
+                                                              /></a>,
+      Sebastian Kosch <a class="icon-link"
+                        href="https://github.com/skosch/"><img src="images/github.png"
+                                                              alt="Github
+                                                                   account"
+                                                              /></a>,
+      Fabian Steuer <a class="icon-link"
+                        href="https://github.com/fabiansteuer/"><img src="images/github.png"
+                                                              alt="Github
+                                                                   account"
+                                                              /></a>,
+      Hoagy Cunningham <a class="icon-link"
+                        href="https://github.com/HoagyC/"><img src="images/github.png"
+                                                              alt="Github
+                                                                   account"
+                                                              /></a>
+    </p>
+    <p><a href="https://github.com/dniku/rl-attention">Github Repository</a></p>
+
+    <p>
+      <em>This project was completed during <a href="https://aisafetycamp.com/">AI Safety Camp</a> 3 in Ávila, Spain, in May 2019.</em>
+    </p>
+    <h2 id="introduction">Introduction</h2>
+    <p>
+      Advances in deep learning are enabling reinforcement learning (RL) agents
+      to accomplish increasingly difficult tasks. For instance, relatively
+      simple machine learning agents can learn how to beat humans in video
+      games, without ever having been programmed how to do so. However, agents
+      sometimes learn to make correct decisions for the wrong reasons, which can
+      lead to surprising and perplexing failures later. In order to diagnose
+      such problems effectively, the developer needs to understand how
+      information flows through the artificial neural network that powers the
+      agent's decision-making process.
+    </p>
+    <p>
+      One approach to visualizing how complex models operate on image inputs is
+      through saliency maps. A saliency map is a heatmap highlighting those
+      pixels of the input image that are most responsible for the model output.
+      An example could be a neural network performing an image classification
+      task: given a photograph of a dog in a meadow that was correctly classfied
+      as "dog", a saliency map highlights the pixels the network considers most
+      dog-like. This lets us check whether the network has truly learned the
+      concept of dogs, or whether it merely made a lucky guess based on the
+      presence of the meadow.
+    </p>
+    <p>
+      To some extent, the methods for generating saliency maps can be repurposed
+      for the analysis of RL agents playing video games, since the agent infers
+      actions (labels) from render frames (images). However, the resulting
+      heatmaps are often blurry or noisy. Furthermore, image classifiers simply
+      detect individual objects, while RL agents must choose actions based on complex
+      relationships between entities detected in the input. A simple heatmap
+      visualization cannot convey whether and where such relationships were
+      detected.
+    </p>
+    <p>
+      In this work, we present a potential improvement to existing visualization
+      approaches in RL, and report on our experimental findings regarding their
+      performance on six Atari games.
+    </p>
+    <h2 id="attention-in-rl-agents">Attention in RL agents</h2>
+    <p>
+      In 2018, Yang et al.<sup id="fnref1"><a href="#fn1">[1]</a></sup> explored
+      the effects of adding two <em>attention layers</em> to the decision-making
+      network of an agent learning to play Breakout and other games. The
+      attention layers, applied after some convolutional layers which detect
+      basic game entities, restrict the input to the agent's action selection
+      mechanism to a subset of the input pixels (the <em>attention mask</em>).
+      In effect, this bottleneck forces the agent's model to focus spatially.
+      This can improve sample efficiency, but more importantly, the
+      attention layer activations provide a direct clue about what the model is
+      focusing on. This directness is attractive when compared to
+      <em>post-hoc</em> methods, which require additional computation to reason
+      about the relevance of network activations after inference.
+    </p>
+    <p>
+      Note that there is no direct correspondence between activated attention
+      layer neurons and relevant input pixels. This is due to the convolutional
+      downsampling layers that separate the input image from the attention
+      layers. However, we can generate a heatmap by backpropagating the
+      attention tensor through the network. Several different approaches exist
+      to accomplish this, from the gradient method introduced by Simonyan et
+      al.<sup id="fnref2"><a href="#fn2">[2]</a></sup> to the more recent
+      SmoothGrad<sup id="fnref5"><a href="#fn5">[5]</a></sup> and VarGrad<sup
+        id="fnref6"
+        ><a href="#fn6">[6]</a></sup
+      >
+      sampling methods.
+    </p>
+    <p>
+      After some experimentation, Yang et al. chose a simpler approach, where
+      they simply visualized the receptive field of the neuron which
+      corresponded to the single strongest activation in their agent's attention layer.
+      Their findings confirm that in trained agents, the attention tends to be
+      strong near crucial entities in the game, i.e. the Pacman sprite or the
+      moving ball in Breakout. However, their attention mask heatmaps are fairly
+      crude.
+    </p>
+    <h2 id="adding-regularization-to-sharpen-the-attention-masks">
+      Sharper attention masks through entropy regularization
+    </h2>
+    <p>
+      The effectiveness of attention layers depends crucially on how the
+      attention is constrained. This is especially true in architectures with
+      repeated downsampling, such as Yang et al.'s, where a small but diffuse attention mask will effectively
+      correspond to all input pixels, defeating the purpose of the attention layer.
+    </p>
+    <p>
+      To incentivize more informative heatmaps than those obtained by Yang et
+      al., we therefore added an extra loss term to represent the diffuseness of the
+      attention tensor. Several options for such loss terms exist; we settled on using the
+      entropy of the final attention layer.
+    </p>
+    <figure>
+          <img
+            src="images/architecture.png"
+            class="center"
+            alt="Diagram of the architecture used in our models."
+          />
+          <figcaption>
+            Figure 1: The architecture of Yang et al., which we used in all
+            experiments. The place where we applied entropy loss is highlighted.
+            Diagram adapted from Yang et al.
+          </figcaption>
+    </figure>
+    <p>
+      The entropy of the attention mask is a single number that captures whether
+      the attention is spread diffusely across the layer (high entropy) or
+      concentrated in a few locations (low entropy). For our purposes, a
+      high entropy is undesirable, as we wish to constrain attention to only a
+      few locations. In other words, the extra loss term rewards our agent for
+      focusing on only a few locations of the input image, which we can later visualize.
+    </p>
+    <p>
+      For a discrete probability distribution \(p_i, i=1..n\), entropy is defined
+      as:
+    </p>
+    <p>
+      \[ \operatorname{entropy}(p) = -\sum_{i = 1}^n p_i \cdot \log(p_i). \]
+    </p>
+    <p>
+      This quantity is greatest when \(p_i \equiv \frac 1 n\) for all \(i\),
+      i.e., when the probability distribution is perfectly
+      uniform. By contrast, it is equal to zero when \(p_i = 1\) for some \(i\),
+      while the other outcomes have zero probability.
+    </p>
+    <p>
+      In our case, we regard the output of the attention layer as a probability
+      distribution, and we modify the loss in such way as to minimize the
+      entropy of this distribution. Specifically, we add \(\lambda \cdot
+      \operatorname{entropy}(attn)\) to the loss, where \(\lambda\) is a
+      non-negative coefficient and \(attn\) is the output of the attention
+      layer.
+    </p>
+    <p>
+      Although attention mechanisms have been shown to improve training times,
+      excessively strong regularization will naturally prevent the agent from
+      taking into account complex relationships between spatially distant
+      entities, and thus degrade performance. We ran a suite of experiments to
+      quantify the impact of entropy regularization on the agent's performance
+      at playing Atari games.
+    </p>
+    <h2 id="experimental-results">Experimental Results</h2>
+    <p>
+      We recreated the agent by Yang et al. in TensorFlow using the
+      <code>stable-baselines</code
+      ><sup id="fnref3"><a href="#fn3">[3]</a></sup> package, a fork of OpenAI's
+      <code>baselines</code> package with a stable programming interface and
+      improved documentation. Since <code>stable-baselines</code> does not
+      include a full implementation of the Rainbow algorithm, we used PPO<sup
+        id="fnref4"
+        ><a href="#fn4">[4]</a></sup
+      >
+      as another state-of-the-art algorithm available in the library.
+    </p>
+    <p>
+      Our experiments show that entropy regularization can be added in such way
+      that its effects on attention maps become pronounced, but performance does
+      not suffer noticeably. The following figure shows average reward agents
+      obtain during training with varying \(\lambda\). The value \(\lambda =
+      0.0\) means that entropy loss did not affect training. This setup should
+      be regarded as baseline.
+    </p>
+    <figure>
+      <img
+        src="images/reward_curves.png"
+        alt="Average reward during training"
+        class="center"
+      />
+      <figcaption>Figure 2: Average reward during training; higher values are
+      better. The purple lines for \(\lambda = 0.0\) correspond to
+      unconstrainted attention. In most environments, slightly constraining
+      attention does not impair training; in a few (like BeamRider and Seaquest)
+      it even leads to *faster* training times.</figcaption>
+    </figure>
+    <p>
+      These results are reassuring: in the environments tested, constraining
+      attention with \(\lambda = 0.0005\) does not slow down training,
+      suggesting that we can use entropy regularization to improve our salience visualizations without
+      degrading agent performance. The following figure shows how \(\lambda\)
+      affects the average performance of trained agents:
+    </p>
+    <figure>
+      <img
+        src="images/scatterplots.png"
+        alt="Figure 3: Scatterplot of final performance. X-axis: attention entropy. Y-axis: average reward."
+        class="center"
+      />
+      <figcaption>
+        Figure 3: Scatterplot of final performance. Higher reward and lower
+        attention entropy are better. Solid circles denote individual runs with
+        various random seeds; cross marks denote averages across runs. Again,
+        purple crosses should be considered baseline; note how even small values
+        for \(\lambda\) consistently reduce entropy without dramatic effects on performance.
+      </figcaption>
+    </figure>
+    <p>
+      With the exception for BeamRider, it is clear that for the particular case
+      of these Atari games, it is possible to choose a value of \(\lambda\) such
+      that the extra term in the loss will have a noticeable effect on entropy
+      value, without degrading performance.
+    </p>
+    <p>
+      In BeamRider, none of the agents achieved good performance. This is
+      expected; the authors of PPO report that learning in BeamRider only starts after roughly 10M
+      frames, and we terminated training after exactly 10M frames.
+    </p>
+    <!--
+    <p>The following is a table with a summary of the above.</p>
+    <div class="figure">
+      <table class="center">
+        <thead>
+          <tr class="header">
+            <th>\(\lambda\)</th>
+            <th>BeamRider</th>
+            <th>Breakout</th>
+            <th>Enduro</th>
+            <th>Frostbite</th>
+            <th>MsPacman</th>
+            <th>Seaquest</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="odd">
+            <td>0.0</td>
+            <td>540±30</td>
+            <td>131±52</td>
+            <td>930±155</td>
+            <td>275±9</td>
+            <td>2147±354</td>
+            <td>851±15</td>
+          </tr>
+          <tr class="even">
+            <td>0.0005</td>
+            <td>569±69</td>
+            <td>120±52</td>
+            <td>928±143</td>
+            <td>273±15</td>
+            <td>2052±336</td>
+            <td>849±39</td>
+          </tr>
+          <tr class="odd">
+            <td>0.001</td>
+            <td>547±46</td>
+            <td>84±31</td>
+            <td>900±115</td>
+            <td>266±7</td>
+            <td>1727±266</td>
+            <td>931±151</td>
+          </tr>
+          <tr class="even">
+            <td>0.002</td>
+            <td>537±43</td>
+            <td>79±21</td>
+            <td>654±87</td>
+            <td>271±16</td>
+            <td>1787±72</td>
+            <td>787±36</td>
+          </tr>
+          <tr class="odd">
+            <td>0.003</td>
+            <td>589±62</td>
+            <td>84±15</td>
+            <td>761±234</td>
+            <td>270±9</td>
+            <td>1546±134</td>
+            <td>911±162</td>
+          </tr>
+          <tr class="even">
+            <td>0.005</td>
+            <td>577±55</td>
+            <td>52±6</td>
+            <td>568±130</td>
+            <td>278±14</td>
+            <td>1554±308</td>
+            <td>954±108</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="caption">Table 1: Summary of experiments.</p>
+    </div>
+     -->
+
+    <p>
+      The following videos show what learned attention maps look like for
+      different \(\lambda\).
+    </p>
+    <figure class="video_container">
+      <video controls="true" allowfullscreen="true" autoplay loop muted>
+        <source src="videos/BeamRider.mp4" type="video/webm" />
+      </video>
+      <video controls="true" allowfullscreen="true" autoplay loop muted>
+        <source src="videos/Breakout.mp4" type="video/webm" />
+      </video>
+      <video controls="true" allowfullscreen="true" autoplay loop muted>
+        <source src="videos/MsPacman.mp4" type="video/webm" />
+      </video>
+      <video controls="true" allowfullscreen="true" autoplay loop muted>
+        <source src="videos/Frostbite.mp4" type="video/webm" />
+      </video>
+      <video controls="true" allowfullscreen="true" autoplay loop muted>
+        <source src="videos/Enduro.mp4" type="video/webm" />
+      </video>
+      <video controls="true" allowfullscreen="true" autoplay loop muted>
+        <source src="videos/Seaquest.mp4" type="video/webm" />
+      </video>
+      <figcaption>
+        Figure 4: Gameplay video for agents trained with different values of
+        \(\lambda\) (left to right: \(\lambda = 0, 0.0005, 0.001, 0.002, 0.003,
+        0.005\)). In each video, the top row shows the original observations
+        with an attention overlay, and the bottom row shows the observations as
+        received by the neural network after preprocessing. In the attention
+        overlay, each rectangle corresponds to one neuron in the attention
+        layer, and the color intensity is proportional to activation values.
+      </figcaption>
+    </figure>
+    <h2 id="visualization">Deep visualization of salience maps</h2>
+    <p>
+      Entropy regularization ensures that attention masks have a few prominent
+      peaks. Each peak corresponds directly to a particular
+      configuration of features in the underlying convolutional layers. In the
+      entropy-regularized networks, the representation of such feature
+      correlations is often pleasantly sparse, lending itself well to a new
+      variant of visualization via layer-relevance propagation.
+    </p>
+    <p>
+      Instead of creating a two-dimensional heatmap based on the activation
+      of the entire attention layer, as is commonly done, we chose to focus on only one
+      or a few of the newly-obtained attention peaks. We then recurse through
+      the layers below, picking the strongest associated activations each time,
+      creating a tree structure that represents, at each convolutional layer,
+      the features that contributed most to the attention peaks—and, thus, to
+      the agent's chosen action.
+    </p>
+    <p>
+      This tree of features can help us understand not only <em>where</em> the
+      most relevant pixels are, but also <em>how</em> these pixels combine to
+      form the features that contributed to the action. The following
+      interactive display shows a selection of four deep branches of the tree
+      structure, and the location of the corresponding features, for a single
+      frame of the Breakout environment.
+    </p>
+    <div class="container">
+        <div class="row text-center">
+            <div class="col-lg-5 game-container">
+            </div>
+            <div class="col-lg-7 align-self-center graph-container">
+            </div>
+        </div>
+    </div>
+    <p> 
+      We select the peaks of the attention layer using a simple peak detection
+      algorithm (more sophisticated approaches, such as k-means clustering with
+      a gap-statistic, proved too slow for interactive visualizations).
+    </p>
+    <p>
+      Although such visualizations are quite time-consuming to implement in an
+      interactive manner, that effort may be justified. After all, understanding
+      an RL agent's behaviour can be more difficult than confirming that a
+      simple image classifier correctly detected the relevant features.
+    </p>
+    <p>
+      In comparison, two-dimensional, heatmap-based salience visualizations
+      cannot adequately capture the spatial relationships between entities
+      in the input that are so essential to selecting the correct action.
+      To illustrate this point, we show here the Simonyan gradient, SmoothGrad and VarGrad of the
+      input with respect to the (unregularized) attention layer:
+    </p>
+    <div class="video-container">
+    <figure>
+      <video controls="true" allowfullscreen="true" loop muted autoplay>
+        <source src="images/simonyan_no_attn.mp4" type="video/webm">
+      </video>
+      <video controls="true" allowfullscreen="true" loop muted autoplay>
+        <source src="images/coef_0.0_sum_smoothgrad_50.mp4" type="video/webm">
+      </video>
+      <video controls="true" allowfullscreen="true" loop muted autoplay>
+        <source src="images/coef_0.0_sum_vargrad_50.mp4" type="video/webm">
+      </video>
+      <figcaption>Figure 5: Standard gradient (Simonyan et al.), SmoothGrad,
+      and VarGrad.</figcaption>
+    </figure>
+    </div>
+    <p>
+      Although SmoothGrad and VarGrad provide a sharper salience map, this
+      advantage quickly diminishes when more samples are used, suggesting that
+      much of the apparent structure is due to the noise in the sampling.
+    </p>
+    <h2 id="conclusion">Conclusion</h2>
+    <p>
+      Applying entropy loss to an attention layer in RL agents can help make their
+      policy networks more interpretable by creating better opportunities for
+      deep, layer-based visualizations with sparse, meaningful peaks, rather
+      than the diffuse, population-encoded activity often seen in unregularized
+      attention layers.
+    </p>
+    <p>
+      We have shown that such entropy-based regularization rarely has a negative
+      effect on agent performance, and can sometimes even improve it, in a
+      variety of Atari environments.
+    </p>
+    <h2 id="references">References</h2>
+    <div class="footnotes">
+      <ol>
+        <li id="fn1">
+          <p>
+            Yang et al.
+            <a href="https://arxiv.org/pdf/1812.11276.pdf"
+              >Learn to Interpret Atari Agents</a
+            ><a href="#fnref1">↩</a>
+          </p>
+        </li>
+        <li id="fn2">
+          <p>
+            Simonyan et al.
+            <a href="https://arxiv.org/abs/1312.6034.pdf"
+              >Deep Inside Convolutional Networks: Visualising Image
+              Classification Models and Saliency Maps</a
+            ><a href="#fnref2">↩</a>
+          </p>
+        </li>
+        <li id="fn3">
+          <p>
+            Hill et al.
+            <a href="https://github.com/hill-a/stable-baselines"
+              >Stable Baselines</a
+            ><a href="#fnref3">↩</a>
+          </p>
+        </li>
+        <li id="fn4">
+          <p>
+            Schulman et al.
+            <a href="https://arxiv.org/abs/1707.06347"
+              >Proximal Policy Optimization Algorithms</a
+            ><a href="#fnref4">↩</a>
+          </p>
+        </li>
+        <li id="fn5">
+          <p>
+            Smilkov et al.
+            <a href="https://arxiv.org/abs/1706.03825"
+              >SmoothGrad: removing noise by adding noise</a
+            ><a href="#fnref5">↩</a>
+          </p>
+        </li>
+        <li id="fn6">
+          <p>
+            Adebayo et al.
+            <a href="https://arxiv.org/abs/1810.03307"
+              >Local Explanation Methods for Deep Neural Networks Lack
+              Sensitivity to Parameter Values</a
+            ><a href="#fnref6">↩</a>
+          </p>
+        </li>
+      </ol>
+    </div>
+    <script type="text/javascript"> 
+    d3.json("https://raw.githubusercontent.com/dniku/rl-attention/master/tree_visualization/screens.json").then(function(screens) {
+        d3.json("https://raw.githubusercontent.com/dniku/rl-attention/master/tree_visualization/trees.json").then(function(trees) {
+
+            var screen = 0,
+                n_screens = screens.length;
+
+            // Game SVG
+            var scale = 4,
+                margin = {top: 20, right: 20, bottom: 20, left: 20},
+                width = 84 * scale,
+                height = 84 * scale;
+
+            const svgGame = d3.select(".game-container")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+            svgGame.on("click", function(d) {
+                var increment = d3.event.altKey ? -1 : 1;
+                screen = screen + increment;
+                if (screen < 0) {
+                    screen = n_screens - 1;
+                }
+                screen = screen % n_screens;
+                updateScreen();
+            });
+
+            const gBackground = svgGame.append("g")
+                .attr("shape-rendering", "crispEdges");
+            
+            const colorScale = d3.scaleLinear()
+                .domain([0, 255])
+                .range(["black", "white"]);
+            
+            const gAttention = svgGame.append("g");
+            
+            // Tree SVG
+            var width = 600,
+                dx = 15,
+                dy = width / 6,
+                margin = ({top: 10, right: 20, bottom: 10, left: 40});
+
+            const svg = d3.selectAll(".graph-container")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", dx)
+                // .attr("viewBox", [-margin.left, -margin.top, width + margin.right, dx])
+                .style("font", "14px sans-serif")
+                .style("user-select", "none");
+
+            const gLink = svg.append("g")
+                .attr("fill", "none")
+                .attr("stroke", "#555")
+                .attr("stroke-opacity", 0.4)
+                .attr("stroke-width", 1.5);
+
+            const gNode = svg.append("g")
+                .attr("cursor", "pointer");
+
+            var tree,
+                diagonal,
+                root;
+
+
+            function updateScreen(){
+
+                // Update background
+                gBackground.selectAll("rect").remove();
+
+                gBackground.selectAll("rect")
+                    .data(screens[screen])
+                    .enter()
+                    .append("rect")
+                    .attr("x", function(d) { return d.x * scale })
+                    .attr("y", function(d) { return d.y * scale })
+                    .attr("width", scale)
+                    .attr("height", scale)
+                    .style("fill", function(d) { return colorScale(d.value) });
+
+                // Update tree
+                data = trees[screen];
+                tree = d3.tree().nodeSize([dx, dy]); 
+                diagonal = d3.linkHorizontal().x(d => d.y).y(d => d.x);
+                root = d3.hierarchy(data);
+
+                root.x0 = dy / 2;
+                root.y0 = 200;
+                root.descendants().forEach((d, i) => {
+                    d.id = i;
+                    d._children = d.children;
+                    // d.children = null;  // Uncomment to start with collapsed tree
+                });
+
+                updateTree(root, screen_change=true);
+            };
+
+
+            // Update tree diagram and attention map
+            function updateTree(source) {
+
+                // Collapsible tree diagram (based on https://observablehq.com/@d3/collapsible-tree)
+                const duration = d3.event && d3.event.altKey ? 250 : 250;
+                const nodes = root.descendants().reverse();
+                const links = root.links();
+
+                // Compute new tree layout
+                tree(root);
+
+                let left = root;
+                let right = root;
+                root.eachBefore(node => {
+                    if (node.x < left.x) left = node;
+                    if (node.x > right.x) right = node;
+                });
+
+                const height = right.x - left.x + margin.top + margin.bottom;
+
+                const transition = svg.transition()
+                    .duration(duration)
+                    .attr("height", height)
+                    .attr("viewBox", [-margin.left, left.x - margin.top, width + margin.right, height])
+                    .tween("resize", window.ResizeObserver ? null : () => () => svg.dispatch("toggle"));
+
+                if (screen_change) {
+                    gNode.selectAll("g").remove();
+                };
+
+                // Update the nodes
+                const node = gNode.selectAll("g")
+                    .data(nodes, d => d.id);
+
+                // Enter any new nodes at the parent's previous position
+                const nodeEnter = node.enter().append("g")
+                    .attr("transform", d => `translate(${source.y0},${source.x0})`)
+                    .attr("fill-opacity", 0)
+                    .attr("stroke-opacity", 0)
+                    .on("click", d => {
+                        d.children = d.children ? null : d._children;
+                        updateTree(d, screen_change=false);
+                    });
+
+                nodeEnter.append("circle")
+                    .attr("r", 5)
+                    .attr("fill", d => d._children ? "#555" : "#999");
+
+                nodeEnter.append("text")
+                    .attr("dy", "0.31em")
+                    .attr("x", d => d._children ? -7 : -7)
+                    .attr("text-anchor", d => d._children ? "end" : "end")
+                    .text(d => d.data.name);
+
+                // Transition nodes to their new position
+                const nodeUpdate = node.merge(nodeEnter).transition(transition)
+                    .attr("transform", d => `translate(${d.y},${d.x})`)
+                    .attr("fill-opacity", 1)
+                    .attr("stroke-opacity", 1);
+
+                // Transition exiting nodes to the parent's new position
+                const nodeExit = node.exit().transition(transition).remove()
+                    .attr("transform", d => `translate(${source.y},${source.x})`)
+                    .attr("fill-opacity", 0)
+                    .attr("stroke-opacity", 0);
+
+                // Update the links
+                const link = gLink.selectAll("path")
+                    .data(links, d => d.target.id);
+
+                // Enter any new links at the parent's previous position
+                const linkEnter = link.enter().append("path")
+                    .attr("d", d => {
+                        const o = {x: source.x0, y: source.y0};
+                        return diagonal({source: o, target: o});
+                    });
+
+                // Transition links to their new position
+                link.merge(linkEnter).transition(transition)
+                    .attr("d", diagonal);
+
+                // Transition exiting nodes to the parent's new position
+                link.exit().transition(transition).remove()
+                    .attr("d", d => {
+                        const o = {x: source.x, y: source.y};
+                        return diagonal({source: o, target: o});
+                    });
+
+                // Stash the old positions for transition
+                root.eachBefore(d => {
+                    d.x0 = d.x;
+                    d.y0 = d.y;
+                });
+
+                // Update the attention squares
+                gAttention.selectAll("rect").remove()
+
+                root.descendants().forEach((d, i) => {
+
+                    size = d.data['square'][2] * scale;
+                    y = d.data['square'][0] * scale- size/2;
+                    x = d.data['square'][1] * scale - size/2;
+                    name = d.data.name;
+
+                    var squareColor = d.data['color'];
+
+                    square = gAttention.append("rect")
+                        .attr("x", x)
+                        .attr("y", y)
+                        .attr("width", size)
+                        .attr("height", size)
+                        .attr("fill", squareColor)
+                        .attr("fill-opacity", 0.02)
+                        .attr("stroke", squareColor)
+                        .attr("stroke-opacity", 0.5)
+                        .attr("name", name);
+
+                    square.append("title")
+                        .text(name);
+
+                    square
+                        .on("mouseover", function(d) {
+                            test = d3.select(this)
+                                .transition()
+                                .duration(100)
+                                .style("fill-opacity", 0.2)
+                                .style("stroke-opacity", 1);
+                        })
+                        .on("mouseout", function(d) {
+                            d3.select(this)
+                                .transition()
+                                .duration(100)
+                                .style("fill-opacity", 0.02)
+                                .style("stroke-opacity", 0.5);
+                        });
+
+                });
+            };
+
+            updateScreen();
+        });
+    });
+    </script>
+  </body>
+</html>

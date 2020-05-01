@@ -1,8 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,700;1,400&display=swap');
+
 *{margin:0;padding:0;}
 body {
-    font:13.34px helvetica,arial,freesans,clean,sans-serif;
+    font: 20px "Inter", system-ui, helvetica,arial,freesans,clean,sans-serif;
     color:black;
-    line-height:1.4em;
     background-color: #F8F8F8;
     padding: 0.7em;
 }
@@ -23,7 +24,7 @@ optgroup{margin-top:.5em;}
 pre,code{font:12px Monaco,"Courier New","DejaVu Sans Mono","Bitstream Vera Sans Mono",monospace;}
 pre {
     margin:1em 0;
-    font-size:12px;
+    font-size:16px;
     background-color:#eee;
     border:1px solid #ddd;
     padding:5px;
@@ -36,28 +37,31 @@ pre {
 }
 pre code {
     padding:0;
-    font-size:12px;
+    font-size:16px;
     background-color:#eee;
     border:none;
 }
 code {
-    font-size:12px;
+    font-size:16px;
     background-color:#f8f8ff;
     color:#444;
     padding:0 .2em;
     border:1px solid #dedede;
 }
-img{border:2px solid black;max-width:100%;float:center}
+img{
+  float:center;
+}
+caption 
 abbr{border-bottom:none;}
 a{color:#4183c4;text-decoration:none;}
 a:hover{text-decoration:underline;}
 a code,a:link code,a:visited code{color:#4183c4;}
-h2,h3{margin:1em 0;}
+h2{margin:1em 0;}
 h1,h2,h3,h4,h5,h6{border:0;}
-h1{font-size:170%;border-top:4px solid #aaa;padding-top:.5em;margin-top:1.5em;}
+h1{font-size:170%;padding-top:.5em;margin-top:1.5em;}
 h1:first-child{margin-top:0;padding-top:.25em;border-top:none;}
-h2{font-size:150%;margin-top:1.5em;border-top:4px solid #e0e0e0;padding-top:.5em;}
-h3{margin-top:1em;}
+h2{font-size:133%;margin-top:1.5em;border-top:4px solid #e0e0e0;padding-top:.5em;}
+h3{margin-top:1em; margin-bottom: -.7em}
 hr{border:1px solid #ddd;}
 ul{margin:1em 0 1em 2em;}
 ol{margin:1em 0 1em 2em;}
@@ -70,6 +74,22 @@ dd{margin-left:2em;margin-bottom:1em;}
     body {
         width: 800px;
         margin:10px auto;
+    }
+    .video-container {
+      width: 100%;
+      text-align: center;
+    }
+    .video-container video {
+      width: 30%;
+    }
+}
+@media screen and (max-width: 767px) {
+    .video-container {
+      width: 100%;
+      text-align: center;
+    }
+    .video-container video {
+      width: 90%;
     }
 }
 .center {
@@ -86,4 +106,19 @@ dd{margin-left:2em;margin-bottom:1em;}
 }
 .caption {
   text-align: center;
+}
+.icon-link > img {
+  border: none;
+  height: 1.3rem;
+}
+video {
+  width: 100%;
+}
+
+figcaption {
+
+    font-size: 80%;
+    margin: 2rem;
+    opacity: 0.81;
+
 }
